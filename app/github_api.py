@@ -15,7 +15,12 @@ def get_user_data(username):
 def get_user_repositories(username):
     url = f"https://api.github.com/users/{username}/repos"
 
-    response = requests.get(url)
+    params = {
+        "per_page": 100,
+        "sort": "updated"
+    }
+
+    response = requests.get(url, params=params)
 
     if response.status_code == 200:
         return response.json()
