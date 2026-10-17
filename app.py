@@ -129,7 +129,7 @@ def show_result(result: dict) -> None:
 
 
 def main() -> None:
-    st.title("GitHub Analyser")
+    st.title("RepoLens")
     st.caption("Enter a GitHub username to get a score, charts and an AI review.")
     settings = load_settings()
 
