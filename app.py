@@ -18,7 +18,7 @@ from github_analyser.llm import build_reviewer
 from github_analyser.scoring import Score
 from github_analyser.workflow import run_review
 
-st.set_page_config(page_title="GitHub Analyser", page_icon="🧭", layout="centered")
+st.set_page_config(page_title="RepoLens", page_icon="🧭", layout="centered")
 
 USERNAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}")
 
