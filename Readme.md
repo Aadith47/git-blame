@@ -1,4 +1,4 @@
-# RepoLens
+# Git-Blame
 
 Enter a GitHub username. The app reads the public data, scores the profile out of 100 with plain
 Python, and then asks an LLM to explain the result: strengths, weaknesses, recommendations and an
@@ -42,7 +42,7 @@ GitHub API --> cache --> pandas --> Facts          (one fork-free set of numbers
 ## Project structure
 
 ```
-repo-lens/
+git-blame/
 ├── app.py                     Streamlit app
 ├── requirements.txt
 ├── pytest.ini
