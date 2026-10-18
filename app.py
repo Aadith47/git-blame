@@ -14,17 +14,47 @@ from github_analyser.charts import (
 )
 from github_analyser.config import Settings
 from github_analyser.github_client import GitHubAnalyserError, fetch_profile_and_repos
+from github_analyser.limits import DailyLimit
 from github_analyser.llm import build_reviewer
 from github_analyser.scoring import Score
 from github_analyser.workflow import run_review
 
-st.set_page_config(page_title="RepoLens", page_icon="🧭", layout="centered")
+st.set_page_config(page_title="GitHub Analyser", page_icon="🧭", layout="centered")
 
 USERNAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}")
+PROFILE_TTL_SECONDS = 3600
+REVIEW_TTL_SECONDS = 86400
 
-# Streamlit re-runs this whole script on every click. Without a cache, each click would call
-# the GitHub API again. The AI review is not cached: the last result lives in session_state.
-load_github_data = st.cache_data(ttl=3600, show_spinner=False)(fetch_profile_and_repos)
+# One cache entry per username, shared by all visitors. Used unless a visitor skips it.
+load_github_data = st.cache_data(ttl=PROFILE_TTL_SECONDS, show_spinner=False)(fetch_profile_and_repos)
+
+
+@st.cache_resource
+def review_budget(limit: int) -> DailyLimit:
+    """One daily counter, shared by every visitor of this running app."""
+    return DailyLimit(limit)
+
+
+@st.cache_data(ttl=REVIEW_TTL_SECONDS, show_spinner=False)
+def review_cached(data_json: str, _reviewer, _budget: DailyLimit):
+    """
+    Runs only on a cache miss, so each real LLM call uses one unit of the daily budget
+    and a cached review costs nothing. The key is the exact JSON sent to the model, so the
+    same numbers always get the same cached review. Arguments starting with _ are not hashed.
+    """
+    _budget.take()
+    return _reviewer.invoke({"data": data_json})
+
+
+class CachedReviewer:
+    """Same .invoke() as the LangChain reviewer, so the workflow does not need to know about the cache."""
+
+    def __init__(self, reviewer, budget: DailyLimit):
+        self._reviewer = reviewer
+        self._budget = budget
+
+    def invoke(self, inputs: dict):
+        return review_cached(inputs["data"], self._reviewer, self._budget)
 
 
 def load_settings() -> Settings:
@@ -38,11 +68,15 @@ def load_settings() -> Settings:
 
 def analyse(username: str, settings: Settings, skip_cache: bool) -> dict:
     if skip_cache:
-        load_github_data.clear()
+        # Fresh data for this request only. The shared cache is left untouched for everyone else.
+        profile, repos = fetch_profile_and_repos(settings.github_token, username)
+    else:
+        profile, repos = load_github_data(settings.github_token, username)
 
-    profile, repos = load_github_data(settings.github_token, username)
     analytics = build_analytics(repos)
-    return run_review(profile, analytics, build_reviewer(settings))
+    budget = review_budget(settings.daily_review_limit)
+    reviewer = CachedReviewer(build_reviewer(settings), budget)
+    return run_review(profile, analytics, reviewer)
 
 
 def show_review(result: dict) -> None:
@@ -129,7 +163,7 @@ def show_result(result: dict) -> None:
 
 
 def main() -> None:
-    st.title("RepoLens")
+    st.title("GitHub Analyser")
     st.caption("Enter a GitHub username to get a score, charts and an AI review.")
     settings = load_settings()
 
