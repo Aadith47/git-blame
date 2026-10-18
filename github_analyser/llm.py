@@ -24,7 +24,7 @@ from github_analyser.scoring import Score
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "gemini-3.6-flash"
+GEMINI_MODEL = "gemini-3.5-Flash-Lite"
 OPENAI_MODEL = "gpt-5.4-mini"
 
 SYSTEM_PROMPT = """You review developers' public GitHub profiles.
