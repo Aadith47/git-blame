@@ -1,15 +1,10 @@
-"""
-Turns the raw repo list into the facts that everything else uses: the score, the charts
-and the AI review. Forks are removed once, here, so no other module has to remember to.
-"""
-
 from dataclasses import asdict, dataclass, fields
 
 import pandas as pd
 
 from github_analyser.models import Repo
 
-HEALTHY_OPEN_ISSUES = 20  # more open issues than this looks neglected
+HEALTHY_OPEN_ISSUES = 20
 RECENT_DAYS = 90
 ACTIVE_DAYS = 365
 
@@ -19,26 +14,26 @@ class Facts:
     total_repos: int
     original_repos: int
     forked_repos: int
-    total_stars: int            # own repos only
-    total_forks: int            # own repos only
+    total_stars: int
+    total_forks: int
     avg_stars: float
     top_repo_name: str | None
     top_repo_stars: int
     languages: dict[str, int]
-    readme_ratio: float         # only repos whose README was actually checked
+    readme_ratio: float
     readme_checked: int
     description_ratio: float
     topics_ratio: float
     license_ratio: float
-    recent_ratio: float         # share of repos pushed to in the last 90 days
-    active_ratio: float         # share of repos pushed to in the last 365 days
+    recent_ratio: float 
+    active_ratio: float
     healthy_issues_ratio: float
 
 
 @dataclass
 class Analytics:
     facts: Facts
-    originals: pd.DataFrame     # one row per own repo, plus a `last_push` column
+    originals: pd.DataFrame
 
 
 def _empty_facts(total_repos: int, forked_repos: int) -> Facts:
@@ -72,7 +67,7 @@ def build_analytics(repos: list[Repo]) -> Analytics:
     if originals.empty:
         return Analytics(_empty_facts(len(everything), forked), originals)
 
-    # A repo that was never pushed to (pushed_at is empty) counts from the day it was created.
+
     now = pd.Timestamp.now(tz="UTC")
     originals["last_push"] = pd.to_datetime(originals["pushed_at"].fillna(originals["created_at"]), utc=True)
     days_idle = (now - originals["last_push"]).dt.days
