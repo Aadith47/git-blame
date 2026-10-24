@@ -1,16 +1,3 @@
-"""
-The AI review. Gemini writes it first. If Gemini fails and OPENROUTER_API_KEY is set, OpenRouter
-writes it instead, trying the models in OPENROUTER_MODELS in order.
-
-The backup is chained with LangChain's with_fallbacks(). Every model is wrapped in a hard
-deadline, and all of them share one total time budget (see timing.py). Once the budget is used
-up, no further model is started.
-
-Model names change often. If you see "model not found", check:
-  Gemini: https://ai.google.dev/gemini-api/docs/deprecations
-  OpenRouter: https://openrouter.ai/models
-"""
-
 import json
 import logging
 from dataclasses import asdict
@@ -31,9 +18,6 @@ logger = logging.getLogger(__name__)
 
 GEMINI_MODEL = "gemini-3.5-flash-lite"
 
-# OpenRouter tries these in order, best first. Each one must support structured output (on
-# openrouter.ai/models, filter by "Structured outputs"). A model that cannot return the review
-# in the right shape is skipped, and OpenRouter moves on to the next one.
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_MODELS = [
     "google/gemma-4-31b-it:free",
