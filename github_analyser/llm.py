@@ -138,7 +138,7 @@ def build_reviewer(settings: Settings) -> Runnable:
     # One retry covers a brief hiccup. The hard deadline bounds the total time, and the 45 second
     # library timeout only makes sure that an abandoned call eventually ends.
     gemini = ChatGoogleGenerativeAI(
-        model=GEMINI_MODEL,
+        model=GEMINI_MODELS,
         google_api_key=settings.gemini_api_key,
         temperature=0.4,
         max_retries=1,
