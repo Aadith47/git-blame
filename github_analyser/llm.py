@@ -1,9 +1,16 @@
 """
-The AI review. Gemini writes it. If Gemini fails and an OpenAI key is set, OpenAI writes it
-instead. That failover is LangChain's own with_fallbacks(), not hand-written code.
+The AI review. Gemini writes it first. If Gemini fails, the backups are tried in this order:
+
+    1. OpenRouter, if OPENROUTER_API_KEY is set. It tries its model list in order.
+    2. OpenAI, if OPENAI_API_KEY is set.
+
+The backups are chained with LangChain's with_fallbacks(). Every model is wrapped in a hard
+deadline, and all of them share one total time budget (see timing.py). Once the budget is used
+up, no further model is started.
 
 Model names change often. If you see "model not found", check:
   Gemini: https://ai.google.dev/gemini-api/docs/deprecations
+  OpenRouter: https://openrouter.ai/models
   OpenAI: https://platform.openai.com/docs/models
 """
 
@@ -17,14 +24,20 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
 from github_analyser.analytics import Analytics
-from github_analyser.config import Settings
+from github_analyser.config import (
+    OPENROUTER_BASE_URL,
+    Settings,
+    backup_providers,
+    openrouter_model_list,
+)
 from github_analyser.models import Profile
 from github_analyser.schemas import GitHubReport
 from github_analyser.scoring import Score
+from github_analyser.timing import TimeBudget, call_with_limits
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "gemini-3.5-Flash-Lite"
+GEMINI_MODEL = "gemini-3.6-flash"
 OPENAI_MODEL = "gpt-5.4-mini"
 
 SYSTEM_PROMPT = """You review developers' public GitHub profiles.
@@ -86,27 +99,65 @@ def build_payload(profile: Profile, analytics: Analytics, score: Score) -> dict:
     }
 
 
-def _chain(model, provider: str) -> Runnable:
+def _chain(model, provider: str, **structured_options) -> Runnable:
     """prompt -> model that answers in the GitHubReport shape -> (report, provider name)."""
-    return PROMPT | model.with_structured_output(GitHubReport) | RunnableLambda(lambda report: (report, provider))
+    structured = model.with_structured_output(GitHubReport, **structured_options)
+    return PROMPT | structured | RunnableLambda(lambda report: (report, provider))
+
+
+def _openrouter_chain(settings: Settings) -> Runnable:
+    models = openrouter_model_list(settings)
+    # With more than one model, OpenRouter itself tries them in order if the first one fails.
+    extra_body = {"models": models, "route": "fallback"} if len(models) > 1 else None
+    llm = ChatOpenAI(
+        model=models[0],
+        api_key=settings.openrouter_api_key,
+        base_url=OPENROUTER_BASE_URL,
+        max_retries=1,
+        timeout=45,
+        extra_body=extra_body,
+    )
+    # json_schema asks OpenRouter to enforce the GitHubReport shape. Not every model supports it,
+    # so a model that cannot do it fails here and the next backup is tried.
+    return _chain(llm, "OpenRouter", method="json_schema")
+
+
+def _guarded(chain: Runnable, name: str, seconds: float, budget: TimeBudget) -> Runnable:
+    """The same chain, but with a hard deadline, and skipped when the shared budget has run out."""
+
+    def call(inputs):
+        return call_with_limits(chain.invoke, inputs, name, seconds, budget)
+
+    return RunnableLambda(call)
 
 
 def build_reviewer(settings: Settings) -> Runnable:
+    # One retry covers a brief hiccup. The hard deadline bounds the total time, and the 45 second
+    # library timeout only makes sure that an abandoned call eventually ends.
     gemini = ChatGoogleGenerativeAI(
         model=GEMINI_MODEL,
         google_api_key=settings.gemini_api_key,
         temperature=0.4,
-        max_retries=2,  # fail over in seconds, not minutes
+        max_retries=1,
         timeout=45,
     )
-    reviewer = _chain(gemini, "Gemini")
+    steps = [("Gemini", _chain(gemini, "Gemini"))]
 
-    if settings.openai_api_key:
-        # No temperature here: the GPT-5 family can reject anything but its default.
-        openai = ChatOpenAI(model=OPENAI_MODEL, api_key=settings.openai_api_key, max_retries=2, timeout=45)
-        reviewer = reviewer.with_fallbacks([_chain(openai, "OpenAI")])
+    for name in backup_providers(settings):
+        if name == "OpenRouter":
+            steps.append((name, _openrouter_chain(settings)))
+        elif name == "OpenAI":
+            # No temperature here: the GPT-5 family can reject anything but its default.
+            openai = ChatOpenAI(model=OPENAI_MODEL, api_key=settings.openai_api_key, max_retries=1, timeout=45)
+            steps.append((name, _chain(openai, "OpenAI")))
 
-    return reviewer
+    def review(inputs: dict):
+        budget = TimeBudget(settings.review_budget_seconds)  # a fresh budget for every review
+        guarded = [_guarded(chain, name, settings.review_deadline_seconds, budget) for name, chain in steps]
+        runnable = guarded[0].with_fallbacks(guarded[1:]) if len(guarded) > 1 else guarded[0]
+        return runnable.invoke(inputs)
+
+    return RunnableLambda(review)
 
 
 def _drop_invented_repos(report: GitHubReport, real_names: set[str]) -> GitHubReport:
