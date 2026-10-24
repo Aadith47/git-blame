@@ -1,5 +1,3 @@
-"""Plotly charts. Every chart reads the fork-free `originals` table."""
-
 import plotly.express as px
 import plotly.graph_objects as go
 
