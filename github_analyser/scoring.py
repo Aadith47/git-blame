@@ -1,8 +1,3 @@
-"""
-The scoring engine: plain arithmetic on Profile and Facts. No pandas and no LLM, so the
-same data always gives the same score and every number can be explained.
-"""
-
 import math
 from dataclasses import dataclass
 
@@ -24,7 +19,7 @@ class CategoryScore:
     name: str
     points: float
     max_points: int
-    parts: dict[str, float]  # points per sub-score, so the score can be explained
+    parts: dict[str, float]
 
 
 @dataclass(frozen=True)
@@ -83,8 +78,6 @@ def _documentation(facts: Facts) -> CategoryScore:
 
 
 def _project_diversity(facts: Facts) -> CategoryScore:
-    # Three languages is full marks. One language still earns a third, so a focused
-    # developer is not punished. "Unknown" (no language detected) does not count.
     known = [language for language in facts.languages if language != "Unknown"]
     return _category("Project diversity", {
         "languages (full marks at 3)": MAX_POINTS["Project diversity"] * min(len(known), 3) / 3,
