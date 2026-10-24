@@ -1,12 +1,6 @@
-"""
-A daily budget for AI reviews. It counts real LLM calls only. Cached reviews cost nothing.
-Thread-safe, because Streamlit runs each visitor's script in its own thread.
-"""
-
 import threading
 from datetime import date
 from typing import Callable
-
 
 class DailyLimitReached(Exception):
     """Today's AI review budget is used up. The score and charts still work."""
