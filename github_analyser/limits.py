@@ -5,7 +5,6 @@ from typing import Callable
 class DailyLimitReached(Exception):
     """Today's AI review budget is used up. The score and charts still work."""
 
-
 class DailyLimit:
     def __init__(self, limit: int, today: Callable[[], date] = date.today):
         self.limit = limit
