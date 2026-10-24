@@ -1,17 +1,14 @@
 """
-The AI review. Gemini writes it first. If Gemini fails, the backups are tried in this order:
+The AI review. Gemini writes it first. If Gemini fails and OPENROUTER_API_KEY is set, OpenRouter
+writes it instead, trying the models in OPENROUTER_MODELS in order.
 
-    1. OpenRouter, if OPENROUTER_API_KEY is set. It tries its model list in order.
-    2. OpenAI, if OPENAI_API_KEY is set.
-
-The backups are chained with LangChain's with_fallbacks(). Every model is wrapped in a hard
+The backup is chained with LangChain's with_fallbacks(). Every model is wrapped in a hard
 deadline, and all of them share one total time budget (see timing.py). Once the budget is used
 up, no further model is started.
 
 Model names change often. If you see "model not found", check:
   Gemini: https://ai.google.dev/gemini-api/docs/deprecations
   OpenRouter: https://openrouter.ai/models
-  OpenAI: https://platform.openai.com/docs/models
 """
 
 import json
@@ -24,12 +21,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
 from github_analyser.analytics import Analytics
-from github_analyser.config import (
-    OPENROUTER_BASE_URL,
-    Settings,
-    backup_providers,
-    openrouter_model_list,
-)
+from github_analyser.config import Settings
 from github_analyser.models import Profile
 from github_analyser.schemas import GitHubReport
 from github_analyser.scoring import Score
@@ -38,7 +30,15 @@ from github_analyser.timing import TimeBudget, call_with_limits
 logger = logging.getLogger(__name__)
 
 GEMINI_MODEL = "gemini-3.6-flash"
-OPENAI_MODEL = "gpt-5.4-mini"
+
+# OpenRouter tries these in order, best first. Each one must support structured output (on
+# openrouter.ai/models, filter by "Structured outputs"). A model that cannot return the review
+# in the right shape is skipped, and OpenRouter moves on to the next one.
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_MODELS = [
+    "google/gemma-4-31b-it:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+]
 
 SYSTEM_PROMPT = """You review developers' public GitHub profiles.
 
@@ -106,19 +106,20 @@ def _chain(model, provider: str, **structured_options) -> Runnable:
 
 
 def _openrouter_chain(settings: Settings) -> Runnable:
-    models = openrouter_model_list(settings)
-    # With more than one model, OpenRouter itself tries them in order if the first one fails.
-    extra_body = {"models": models, "route": "fallback"} if len(models) > 1 else None
+    # require_parameters: only use providers that support everything in the request, including
+    # the JSON schema. Without it, OpenRouter may quietly drop the schema and answer in plain text.
+    extra_body = {"provider": {"require_parameters": True}}
+    if len(OPENROUTER_MODELS) > 1:
+        extra_body["models"] = OPENROUTER_MODELS  # OpenRouter tries these in order
+
     llm = ChatOpenAI(
-        model=models[0],
+        model=OPENROUTER_MODELS[0],
         api_key=settings.openrouter_api_key,
         base_url=OPENROUTER_BASE_URL,
         max_retries=1,
         timeout=45,
         extra_body=extra_body,
     )
-    # json_schema asks OpenRouter to enforce the GitHubReport shape. Not every model supports it,
-    # so a model that cannot do it fails here and the next backup is tried.
     return _chain(llm, "OpenRouter", method="json_schema")
 
 
@@ -142,14 +143,8 @@ def build_reviewer(settings: Settings) -> Runnable:
         timeout=45,
     )
     steps = [("Gemini", _chain(gemini, "Gemini"))]
-
-    for name in backup_providers(settings):
-        if name == "OpenRouter":
-            steps.append((name, _openrouter_chain(settings)))
-        elif name == "OpenAI":
-            # No temperature here: the GPT-5 family can reject anything but its default.
-            openai = ChatOpenAI(model=OPENAI_MODEL, api_key=settings.openai_api_key, max_retries=1, timeout=45)
-            steps.append((name, _chain(openai, "OpenAI")))
+    if settings.openrouter_api_key:
+        steps.append(("OpenRouter", _openrouter_chain(settings)))
 
     def review(inputs: dict):
         budget = TimeBudget(settings.review_budget_seconds)  # a fresh budget for every review
