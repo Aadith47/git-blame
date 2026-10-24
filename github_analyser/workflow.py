@@ -1,14 +1,3 @@
-"""
-The LangGraph pipeline:
-
-    START -> scoring -> review -> END
-                 \\-> END   (skipped when there is nothing to review)
-
-The branch is the reason to use a graph here: an account with no original repos never
-costs an LLM call. Node names must differ from state keys, which is why this is
-"scoring" and "review" rather than "score" and "report".
-"""
-
 import logging
 from typing import TypedDict
 
@@ -23,7 +12,6 @@ from github_analyser.schemas import GitHubReport
 from github_analyser.scoring import Score, calculate_score
 
 logger = logging.getLogger(__name__)
-
 
 class ReviewState(TypedDict, total=False):
     profile: Profile
@@ -48,11 +36,8 @@ def make_review_node(reviewer: Runnable):
             report, provider = write_review(reviewer, state["profile"], state["analytics"], state["score"])
             return {"report": report, "provider": provider, "error": None}
         except DailyLimitReached as error:
-            # Expected, not a bug, so no traceback in the logs.
             return {"report": None, "provider": None, "error": str(error)}
         except Exception as error:
-            # Logged with the traceback, so a real bug in our own code does not
-            # hide behind the friendly message the user sees.
             logger.exception("The AI review failed")
             return {"report": None, "provider": None, "error": f"AI review unavailable: {error}"}
 
