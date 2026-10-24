@@ -35,7 +35,7 @@ def run_with_deadline(function: Callable, seconds: float):
         return future.result(timeout=seconds)
     except FutureTimeout:
         if future.done():
-            raise  # the function itself raised a TimeoutError. That is not our deadline.
+            raise
         raise ModelTimeout(f"no answer after {seconds:.0f} seconds") from None
     finally:
         pool.shutdown(wait=False)
