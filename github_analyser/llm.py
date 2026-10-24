@@ -29,10 +29,8 @@ from github_analyser.timing import TimeBudget, call_with_limits
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODELS = [
-    "gemini-3.5-flash-lite",
-    "gemini-3.6-flash",
-]
+GEMINI_MODEL = "gemini-3.5-flash-lite"
+
 # OpenRouter tries these in order, best first. Each one must support structured output (on
 # openrouter.ai/models, filter by "Structured outputs"). A model that cannot return the review
 # in the right shape is skipped, and OpenRouter moves on to the next one.
@@ -138,7 +136,7 @@ def build_reviewer(settings: Settings) -> Runnable:
     # One retry covers a brief hiccup. The hard deadline bounds the total time, and the 45 second
     # library timeout only makes sure that an abandoned call eventually ends.
     gemini = ChatGoogleGenerativeAI(
-        model=GEMINI_MODELS,
+        model=GEMINI_MODEL,
         google_api_key=settings.gemini_api_key,
         temperature=0.4,
         max_retries=1,
