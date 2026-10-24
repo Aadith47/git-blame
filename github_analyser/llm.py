@@ -29,8 +29,10 @@ from github_analyser.timing import TimeBudget, call_with_limits
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "gemini-3.6-flash"
-
+GEMINI_MODELS = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+]
 # OpenRouter tries these in order, best first. Each one must support structured output (on
 # openrouter.ai/models, filter by "Structured outputs"). A model that cannot return the review
 # in the right shape is skipped, and OpenRouter moves on to the next one.
