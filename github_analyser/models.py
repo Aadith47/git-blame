@@ -1,5 +1,3 @@
-"""The two plain data types that move between modules."""
-
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -28,7 +26,7 @@ class Repo:
     topics: list[str]
     created_at: datetime
     pushed_at: datetime | None
-    has_readme: bool | None  # None means "not checked". It does not mean "missing".
+    has_readme: bool | None
     size_kb: int
     open_issues: int
     license: str | None
