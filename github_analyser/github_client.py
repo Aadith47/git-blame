@@ -1,8 +1,3 @@
-"""
-Reads a GitHub user through PyGithub and returns plain dataclasses.
-There is no Streamlit in here, so this module can be tested and reused without the UI.
-"""
-
 import logging
 from datetime import datetime, timezone
 from itertools import islice
@@ -20,8 +15,8 @@ from github_analyser.models import Profile, Repo
 
 logger = logging.getLogger(__name__)
 
-MAX_REPOS = 100          # the 100 most recently pushed repos is plenty for a fair picture
-README_CHECK_LIMIT = 30  # every README check costs one extra API call
+MAX_REPOS = 100
+README_CHECK_LIMIT = 30
 
 
 class GitHubAnalyserError(Exception):
@@ -108,8 +103,6 @@ def _has_readme(repo) -> bool:
         repo.get_readme()
         return True
     except UnknownObjectException:
-        # A 404 really does mean "no README". Any other error (rate limit, network)
-        # must not be mistaken for it, so it is left to bubble up.
         return False
 
 
