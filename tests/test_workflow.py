@@ -8,7 +8,6 @@ pytest.importorskip("langchain_openai")
 from github_analyser.analytics import build_analytics  # noqa: E402
 from github_analyser.workflow import route_after_scoring, run_review  # noqa: E402
 
-
 class ExplodingReviewer:
     def invoke(self, inputs):
         raise AssertionError("the LLM must not be called")
