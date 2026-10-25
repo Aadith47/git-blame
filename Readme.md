@@ -6,6 +6,8 @@ action plan.
 
 Python works out the facts. The LLM only explains them. It never calculates the score.
 
+![Git-Blame](assets/screenshot.png)
+
 ## Features
 
 - Profile and repository data from the GitHub API (PyGithub)
